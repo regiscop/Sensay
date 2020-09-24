@@ -8,24 +8,17 @@ from constants import *
 import requests
 
 
-# -------------------------------------------------------------------------------------------------------------------
 
-
-# ---------------------------------------------------------------------------------------------------------------------
-class SendViral(Interaction):  # ok
+class WelcomeNewUser(Interaction):
     def __init__(self, bot, user):
         super().__init__(bot, user)
+        self.start = None
 
     def usefulness(self):
-        if datetime.now() < datetime.strptime(str(self.user.s_time_of_last_message), '%Y-%m-%d %H:%M:%S.%f') + timedelta(hours=0.1):
+        if self.user.s_greeted_by_sensay:
             return 0.0
-        if self.calls == 0:
-            # This interaction never ran before for this user
-            return 0.05
         else:
-            if self.timesince_last_call() > a_month:  # Every months. I don't want to spam too much my user
-                return 0.05
-            return 0.0
+            return 3.0
 
     def execute(self):
         super().execute()
@@ -34,89 +27,59 @@ class SendViral(Interaction):  # ok
             self.state = 'start'
 
         elif self.state == 'start':
-            self.time_started = datetime.now()
-            self.state = 'wait_a_bit'
-
-        elif self.state == 'wait_a_bit':
-            if (datetime.now() - self.time_started).total_seconds() > 5:  # Wait a bit after previous interaction before sending a lot of text
-                self.state = 'say'
-            
-        elif self.state == 'say':
-            if self.user.last_channel_per_bot[self.bot.name] != "webchat":
-                self.bot.say(self.user, "I would highly appreciate if you recommend me to your friends. Why don't you share/transfer the next text message? So your friends can chat with the Sensay community!!")
-                if self.user.last_channel_per_bot[self.bot.name] == "Telegram":
-                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with the Sensay Network! It's amazing!: https://t.me/SensayChatBot ")
-                elif self.user.last_channel_per_bot[self.bot.name] == "Line":
-                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! It's amazing!: https://line.me/R/ti/p/TBD ")
-                elif self.user.last_channel_per_bot[self.bot.name] == "Twilio":
-                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! It's amazing!: here is her phone: +32460TBD")
-                elif self.user.last_channel_per_bot[self.bot.name] == "Kik":
-                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! It's amazing!: https://kik.me/TBD")
-                elif self.user.last_channel_per_bot[self.bot.name] == "Skype":
-                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! It's amazing!: https://join.skype.com/bot/TBD")
-                elif self.user.last_channel_per_bot[self.bot.name] == "Facebook":
-                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! It's amazing!:  http://m.me/SensayChatBot")
-                else:
-                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! He is amazing!:  http://m.me/SensayChatBot")
+            self.bot.say(self.user, "Welcome to the Sensay network! An opensource collaborative chatbot.")
+            self.bot.say(self.user, "Chat now with a helpful human.")
+            self.user.s_greeted_by_sensay = True
+            self.user.greeted_date_sensay = datetime.now()
+            self.bot.clean_inbox(self.user)
+            if self.user.last_channel_per_bot[self.bot.name] == "Facebook":
+                try:
+                    r = requests.get("https://graph.facebook.com/v2.8/" + self.user.s_numbers['Facebook'] +"?fields=first_name,last_name,gender,timezone&access_token=" + FB_token)
+                    self.user.s_name = r.json()['first_name']
+                    self.user.s_last_name = r.json()['last_name']
+                except:
+                    self.bot.launch_interaction(AskName(self.bot, self.user))
+            elif self.user.last_channel_per_bot[self.bot.name] == "Twilio":
+                self.user.gender = 'male' # Make sure we don't spend money on Twilio for messages for useless info
+                self.user.s_name = 'Mister X' # Make sure we don't spend money on Twilio for messages for useless info
             else:
-                self.bot.say(self.user, "I would highly appreciate if you recommend me to your friends. Share the following link with all your friends (http://m.me/SensayChatBot) and maybe, you will meet them @ the activities I organize!!")
-
-            self.state = 'success'
-            
-        elif self.state == 'success':
-            self.bot.launch_interaction(Breath(self.bot, self.user))
-            self.state = 'end'
-            
-        elif self.state == 'failure':
-            self.state = 'end'
-            
-        elif self.state == 'end':
-            pass
-
-
-# ---------------------------------------------------------------------------------------------------------------------
-class Breath(Interaction):  # ok
-    """ Just wait a bit and slow the discussion a bit to make it more natural when needed"""
-    def __init__(self, bot, user):
-        super().__init__(bot, user)
-
-    def usefulness(self):
-        return 0.0
-
-    def execute(self):
-        super().execute()
-        if self.state is None:
-            self.state = 'start'
-
-        elif self.state == 'start':
-            self.start = datetime.now()
+                self.bot.launch_interaction(AskName(self.bot, self.user))
             self.state = 'wait_a_bit'
+            self.start = datetime.now()
 
         elif self.state == 'wait_a_bit':
-            if (datetime.now() - self.start).total_seconds() < 5:
+            if (datetime.now() - self.start).total_seconds() < 2:
                 return
             else:
                 self.state = 'success'
-                
+
         elif self.state == 'success':
             self.bot.remove_possible(self)
+            self.bot.launch_interaction(Breath(self.bot, self.user))
+            self.bot.queue_interaction(AskQuestion(self.bot, self.user))
             self.state = 'end'
-            
+
         elif self.state == 'end':
             pass
+# -----------------------------------------------------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------------------------------------------------
-class AskQuestion(Interaction):  # ok
+class AskName(Interaction):  # ok
     def __init__(self, bot, user):
         super().__init__(bot, user)
-        self.time_asked = datetime.now()
-        self.time_conf_asked = datetime.now()
-        self.query = None
-        self.question_local = None
+        self.time_asked = None
 
     def usefulness(self):
-        return 0
+        if self.user.s_name:
+            return 0.0
+        elif not self.launches:
+            # We don't know the name and this interaction never ran before
+            return 0.5
+        elif self.timesince_last_call() < 60*10.0:
+            # We still don't know the name but apparently we already asked without success
+            return 0.0
+        else:
+            return 0.5
 
     def execute(self):
         super().execute()
@@ -125,62 +88,26 @@ class AskQuestion(Interaction):  # ok
             self.state = 'start'
 
         elif self.state == 'start':
-            self.bot.say(self.user, "Ok, let's start... but first, does your question has to be shared with only your neighbours? (Y = Only locals, N= Skilled community)")
-            self.state = 'wait for first answer'
-            self.time_asked = datetime.now()
-            self.question_local = False
+            if self.get_state_calls() <= 1:  # because we have to go thru the state "None" before
+                self.bot.say(self.user, lingua.whats_your_name())
+            elif self.get_state_calls() <= 2:  # because we have to go thru the state "Failure" "None" before
+                self.bot.say(self.user, "You haven't told me your name yet?")
+            elif self.get_state_calls() <= 3:
+                self.bot.say(self.user, "You still don't want to tell me your name?")
+            elif self.get_state_calls() <= 4:
+                self.bot.say(self.user, "I guess I will never get to know your name...")
+                # "Do you have privacy concerns???"
+            else:
+                self.bot.say(self.user, "As I don't know your name, I will call you Mr. Pink.")
+                self.user.s_name = 'Mr. Pink'
+                self.state = 'success'
 
-        elif self.state == 'wait for first answer':
-            if (datetime.now() - self.time_asked).total_seconds() > 60 * 5:
-                self.bot.say(self.user, "Ok, don't hesitate to come back to me later with a question via the menu...")
-                self.state = 'failure'
-                return
-
-            elif self.bot.inbox[self.user]:
-
-                infos = {}
-                for msg in self.bot.inbox[self.user]:
-                    results = corpus.process(msg.text)
-                    infos.update(corp_get(results, 'boolean'))
-                    infos.update(corp_get(results, 'tone'))
-
-                if 'tone' in infos:
-                    if infos['tone'] == 'rude' and infos['tone_score'] > 0.7:
-                        self.bot.say(self.user, lingua.dont_be_so_rude())
-                        self.bot.clean_inbox(self.user)
-                elif 'boolean' in infos and infos['boolean_score'] > 0.1:
-                    self.bot.clean_inbox(self.user)
-                    if infos['boolean'] == "true":
-                        self.question_local = True
-                    self.bot.say(self.user,lingua.ok())
-                    if self.user.s_home_location is None:
-                        self.bot.launch_interaction(AskLocation(self.bot, self.user))
-                        self.state = 'Ask the question after asking location'
-                    else:
-                        self.bot.say(self.user, "Now, Tell me... What is your question?")
-                        self.state = 'wait for answer'
-                    return
-                else:
-                    self.bot.say(self.user, lingua.i_dont_understand_sensay())
-                    self.bot.clean_inbox(self.user)
-                    return
-
-            if self.bot.inbox[self.user]:
-                self.bot.launch_interaction(ProcessSpontaneous(self.bot, self.user))
-                return
-            if self.state == 'wait for first answer' and self.get_state_calls_with_msg() >= 3:
-                self.clean_state_calls_with_msg()
-                self.state = 'start'
-                return
-            
-        elif self.state == 'Ask the question after asking location':
-            self.bot.say(self.user, "Ok,  tell me... What is your question?")
             self.state = 'wait for answer'
-            return
-            
+            self.time_asked = datetime.now()
+
         elif self.state == 'wait for answer':
-            if (datetime.now() - self.time_asked).total_seconds() > 60*5:
-                self.bot.say(self.user, "Ok, don't hesitate to come back to me later with a question via the menu...")
+            if (datetime.now() - self.time_asked).total_seconds() > wait_for_answer_time:
+                self.bot.say(self.user, lingua.you_must_be_busy())
                 self.state = 'failure'
                 return
 
@@ -188,37 +115,90 @@ class AskQuestion(Interaction):  # ok
                 infos = {}
                 for msg in self.bot.inbox[self.user]:
                     results = corpus.process(msg.text)
-                    infos.update({'text': msg.text})
+                    infos.update(corp_get(results, 'someone'))
                     infos.update(corp_get(results, 'tone'))
+                    infos.update(corp_get(results, 'logic'))
+                    if ' ' not in msg.text:
+                        infos.update({'any': msg.text, 'any_score': 1})
+                    infos.update(corp_get(results, 'any'))
 
                 if 'tone' in infos:
-                    if infos['tone'] == 'rude' and infos['tone_score'] > 0.9:
+                    if infos['tone'] == 'rude' and infos['tone_score'] > 0.4:
                         self.bot.say(self.user, lingua.dont_be_so_rude())
                         self.bot.clean_inbox(self.user)
-                        self.state = 'failure'
+                if 'someone' in infos and 'logic' in infos and infos['logic'] == "negative":
+                    self.bot.say(self.user, "haha! trying to test me? I'm smarter than you think... So... What's your name then?")
+                    self.state = 'wait for answer'
+                    self.time_asked = datetime.now()
+                    self.bot.clean_inbox(self.user)
+                    return
+                if 'someone' in infos or 'any' in infos:
+                    answer = sa.get_gender_based_on_name(infos['someone'] if 'someone' in infos else infos['any'])
+                    if (infos['someone'] if 'someone' in infos else infos['any']).lower() == "Streets":
+                        self.bot.say(self.user, "Really?'{}'!. Just like me?. Are you sure I got it right?".format(
+                            infos['someone'] if 'someone' in infos else infos['any']))
+                        self.state = 'wait for confirmation'
+                        self.time_asked = datetime.now()
+                        self.bot.clean_inbox(self.user)
+                        self.user.s_name = "Streets"
+                        if answer is not None and answer['accuracy'] > 95:
+                            self.user.gender = answer['gender']
+                        else:
+                            self.bot.add_again_possible(AskGender(self.bot, self.user))
                         return
+                    if answer and answer['samples'] < 1000:
+                        self.bot.say(self.user, "Really?'{}'!. That's unusual. Are you sure I got it right?".format(infos['someone'] if 'someone' in infos else infos['any']))
+                        self.state = 'wait for confirmation'
+                        self.time_asked = datetime.now()
+                        self.bot.clean_inbox(self.user)
+                        self.user.s_name = infos['someone'] if 'someone' in infos else infos['any']
+                        if answer is not None and answer['accuracy'] > 95:
+                            self.user.gender = answer['gender']
+                        else:
+                            self.bot.add_again_possible(AskGender(self.bot, self.user))
+                        return
+                    elif ('someone_score' in infos and infos['someone_score'] < 0.00001) or ('any' in infos and infos['any_score'] < 0.00001):
+                        self.bot.say(self.user,
+                                     "It's the first time I meet someone named '{}'!. Are you sure I got it right?".format(
+                                         infos['someone'] if 'someone' in infos else infos['any']))
+                        self.state = 'wait for confirmation'
+                        self.time_asked = datetime.now()
+                        self.bot.clean_inbox(self.user)
+                        self.user.s_name = infos['someone'] if 'someone' in infos else infos['any']
+                        if answer is not None and answer['accuracy'] > 95:
+                            self.user.gender = answer['gender']
+                        return
+                    self.user.s_name = infos['someone'] if 'someone' in infos else infos['any']
+                    self.bot.say(self.user, lingua.ok())
+                    self.bot.say(self.user, "Nice to meet you, {}!".format(self.user.s_name))
+                    self.bot.clean_inbox(self.user)
 
-                self.query = Question(infos['text'], self.user)
-                self.query.question_local = self.question_local
-                if self.query.question_local:
-                    self.bot.say(self.user, "The question that will be sent to your neighbours is: " + str(self.query.question) + ". Do you confirm? (y/n)" )
-                else:
-                    self.bot.say(self.user, "The question that will be sent to the Sensay community is: " + str(self.query.question) + ". Do you confirm? (y/n)")
-                self.time_conf_asked = datetime.now()
-                self.bot.clean_inbox(self.user)
-                self.state = 'wait for confirmation'
-                return
-
+                    if answer is not None and answer['accuracy'] > 85:
+                        self.user.gender = answer['gender']
+                    elif answer is not None and answer['accuracy'] > 70:
+                        if answer['gender'] == 'female':
+                            self.bot.say(self.user, "I know a few {} named like that, but also a {}.".format("girls", "boy"))
+                        else:
+                            self.bot.say(self.user, "I know a few {} named like that, but also a {}.".format("boys", "girl"))
+                        self.bot.launch_interaction(AskGender(self.bot, self.user))
+                    else:
+                        self.bot.say(self.user, "mmm... I don't know any people named like that.")
+                        if answer is not None and answer['accuracy'] > 95:
+                            self.user.gender = answer['gender']
+                        else:
+                            self.bot.launch_interaction(AskGender(self.bot, self.user))
+                    self.state = 'success'
+                    return
             if self.bot.inbox[self.user]:
                 self.bot.launch_interaction(ProcessSpontaneous(self.bot, self.user))
                 return
-            if self.state == 'wait for answer' and self.get_state_calls_with_msg() >= 3:
+            if self.state == 'wait for answer' and self.get_state_calls_with_msg() >= 2:
                 self.clean_state_calls_with_msg()
                 self.state = 'start'
                 return
-            
+
         elif self.state == 'wait for confirmation':
-            if (datetime.now() - self.time_conf_asked).total_seconds() > wait_for_answer_time:
+            if (datetime.now() - self.time_asked).total_seconds() > wait_for_answer_time:
                 self.bot.say(self.user, lingua.you_must_be_busy())
                 self.state = 'failure'
                 return
@@ -229,376 +209,124 @@ class AskQuestion(Interaction):  # ok
                     results = corpus.process(msg.text)
                     infos.update(corp_get(results, 'boolean'))
                     infos.update(corp_get(results, 'tone'))
-                if 'tone' in infos:
-                    if infos['tone'] == 'rude' and infos['tone_score'] > 0.7:
-                        self.bot.say(self.user, lingua.dont_be_so_rude())
-                        self.bot.clean_inbox(self.user)
-                elif 'boolean' in infos and infos['boolean_score'] > 0.1:
+                    infos.update(corp_get(results, 'someone'))
+
+                if 'boolean' in infos and infos['boolean_score'] > 0 and infos['boolean'] == 'true':
+                    self.bot.say(self.user, "ok! got it! ... then,  nice to meet you, {}!".format(self.user.s_name))
+                    self.bot.add_possible(AskGender(self.bot, self.user))
                     self.bot.clean_inbox(self.user)
-                    if infos['boolean'] == "true":
-                        self.state = 'success'
-                        is_not_too_far = lambda u: self.bot.distance(u, self.user, "s_home_location") < 18000.0
-                        is_not_the_user = lambda u: u is not self.user
-                        users_not_too_far = self.bot.search_if(lambda f: is_not_too_far(f) and is_not_the_user(f))
-                        distance = lambda u: self.bot.distance(u, self.user, "s_home_location")
-                        ranked = sorted(users_not_too_far, key=distance)
-                        if ranked is None or len(ranked) <= 0:
-                            self.bot.say(self.user, "Sorry but it seems very few users are currently connected in your area. I will keep you posted when more people are around your place.")
-                            self.bot.clean_inbox(self.user)
-                            return
-                        self.query.to_be_asked = ranked[:10]
-                        self.bot.launch_interaction(LoopToAll(self.bot, self.query))
-                        self.bot.say(self.user, "Ok, understood! ((( signaling sensay ))) I'm currently looking for a human to help. Stay connected. It might take max 5 minutes...")
-                    else:
-                        self.state = 'failure'
-                        self.bot.say(self.user, "Ok! No probs")
+                    self.state = 'success'
+                    return
+                elif 'someone' in infos and 'boolean' in infos and infos['boolean_score'] > 0 and infos['boolean'] == 'false':
+                    self.user.s_name = infos['someone']
+                    self.bot.say(self.user, "Ok! Understood! Nice to meet you, {}!".format(self.user.s_name))
+                    self.bot.add_possible(AskGender(self.bot, self.user))
+                    self.bot.clean_inbox(self.user)
+                    self.state = 'success'
+                    return
+                elif 'boolean' in infos and infos['boolean_score'] > 0 and infos['boolean'] == 'false':
+                    self.bot.say(self.user, "Ok! What's your name then?")
+                    self.state = 'wait for answer'
+                    self.time_asked = datetime.now()
                     self.bot.clean_inbox(self.user)
                     return
                 else:
-                    self.bot.say(self.user, lingua.i_dont_understand_sensay())
+                    self.bot.say(self.user, "I'm not sure I get it")
+                    self.state = 'wait for confirmation'
+                    self.time_asked = datetime.now()
                     self.bot.clean_inbox(self.user)
                     return
             if self.bot.inbox[self.user]:
                 self.bot.launch_interaction(ProcessSpontaneous(self.bot, self.user))
                 return
             if self.state == 'wait for confirmation' and self.get_state_calls_with_msg() >= 2:
+                self.bot.say(self.user, " '{}'! Did I understand your name correctly?".format(self.user.s_name))
+                self.time_asked = datetime.now()
                 self.clean_state_calls_with_msg()
-                self.state = 'start'
                 return
-            
+
         elif self.state == 'success':
+            self.bot.remove_possible(self)
             self.bot.launch_interaction(Breath(self.bot, self.user))
             self.state = 'end'
+
+        elif self.state == 'failure':
+            self.state = 'end'
+
+        elif self.state == 'end':
+            pass
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+class AskGender(Interaction):  # ok
+    def __init__(self, bot, user):
+        super().__init__(bot, user)
+        self.time_asked = None
+
+    def usefulness(self):
+        if self.user.gender:
+            return 0.0
+        else:
+            return 0.9
+
+    def execute(self):
+        super().execute()
+
+        if self.state is None:
+            self.state = 'start'
+
+        elif self.state == 'start':
+            self.bot.say(self.user, "Are you a male or female?")
+            self.state = 'wait for answer'
             self.time_asked = datetime.now()
-            
+
+        elif self.state == 'wait for answer':
+            if (datetime.now() - self.time_asked).total_seconds() > wait_for_answer_time:
+                self.bot.say(self.user, lingua.you_must_be_busy())
+                self.state = 'failure'
+                return
+
+            elif self.bot.inbox[self.user]:
+                infos = {}
+                for msg in self.bot.inbox[self.user]:
+                    results = corpus.process(msg.text)
+                    infos.update(corp_get(results, 'gender'))
+                    infos.update(corp_get(results, 'tone'))
+
+                if 'tone' in infos:
+                    if infos['tone'] == 'rude' and infos['tone_score'] > 0.0:
+                        self.bot.say(self.user, lingua.dont_be_so_rude())
+                        self.bot.clean_inbox(self.user)
+                if 'gender' in infos and infos['gender_score'] > 0.0:
+                    self.user.gender = infos['gender']
+                    self.bot.say(self.user, lingua.ok())
+                    self.bot.clean_inbox(self.user)
+                    self.state = 'success'
+                    return
+
+            if self.bot.inbox[self.user]:
+                self.bot.launch_interaction(ProcessSpontaneous(self.bot, self.user))
+                return
+            if self.state == 'wait for answer' and self.get_state_calls_with_msg() >= 3:
+                self.clean_state_calls_with_msg()
+                self.state = 'ask'
+                return
+
+        elif self.state == 'success':
+            self.bot.remove_possible(self)
+            self.bot.launch_interaction(Breath(self.bot, self.user))
+            self.state = 'end'
+
         elif self.state == 'failure':
             self.resetting()
             self.state = 'end'
-            
+
         elif self.state == 'end':
             pass
-
-
 # ----------------------------------------------------------------------------------------------------------------------
 
 
 class AskLocation(Interaction):  # ok
-                        return
-    class WelcomeNewUser(Interaction):
-        def __init__(self, bot, user):
-            super().__init__(bot, user)
-            self.start = None
-
-        def usefulness(self):
-            if self.user.s_greeted_by_sensay:
-                return 0.0
-            else:
-                return 3.0
-
-        def execute(self):
-            super().execute()
-
-            if self.state is None:
-                self.state = 'start'
-
-            elif self.state == 'start':
-                self.bot.say(self.user, "Welcome to the Sensay network! An opensource collaborative chatbot.")
-                self.bot.say(self.user, "Chat now with a helpful human.")
-                self.user.s_greeted_by_sensay = True
-                self.user.greeted_date_sensay = datetime.now()
-                self.bot.clean_inbox(self.user)
-                if self.user.last_channel_per_bot[self.bot.name] == "Facebook":
-                    try:
-                        r = requests.get("https://graph.facebook.com/v2.8/" + self.user.s_numbers['Facebook'] +"?fields=first_name,last_name,gender,timezone&access_token=" + FB_token)
-                        self.user.s_name = r.json()['first_name']
-                        self.bot.say(self.user, "recorded info {}".format(self.user.s_name))
-                        self.user.s_last_name = r.json()['last_name']
-                    except:
-                        self.bot.launch_interaction(AskName(self.bot, self.user))
-                elif self.user.last_channel_per_bot[self.bot.name] == "Twilio":
-                    self.user.gender = 'male' # Make sure we don't spend money on Twilio for messages for useless info
-                    self.user.s_name = 'Mister X' # Make sure we don't spend money on Twilio for messages for useless info
-                else:
-                    self.bot.launch_interaction(AskName(self.bot, self.user))
-                self.state = 'wait_a_bit'
-                self.start = datetime.now()
-
-            elif self.state == 'wait_a_bit':
-                if (datetime.now() - self.start).total_seconds() < 2:
-                    return
-                else:
-                    self.state = 'success'
-
-            elif self.state == 'success':
-                self.bot.remove_possible(self)
-                self.bot.launch_interaction(Breath(self.bot, self.user))
-                self.bot.queue_interaction(AskQuestion(self.bot, self.user))
-                self.state = 'end'
-
-            elif self.state == 'end':
-                pass
-    # -----------------------------------------------------------------------------------------------------------------------
-
-
-    class AskName(Interaction):  # ok
-        def __init__(self, bot, user):
-            super().__init__(bot, user)
-            self.time_asked = None
-
-        def usefulness(self):
-            if self.user.s_name:
-                return 0.0
-            elif not self.launches:
-                # We don't know the name and this interaction never ran before
-                return 0.5
-            elif self.timesince_last_call() < 60*10.0:
-                # We still don't know the name but apparently we already asked without success
-                return 0.0
-            else:
-                return 0.5
-
-        def execute(self):
-            super().execute()
-
-            if self.state is None:
-                self.state = 'start'
-
-            elif self.state == 'start':
-                if self.get_state_calls() <= 1:  # because we have to go thru the state "None" before
-                    self.bot.say(self.user, lingua.whats_your_name())
-                elif self.get_state_calls() <= 2:  # because we have to go thru the state "Failure" "None" before
-                    self.bot.say(self.user, "You haven't told me your name yet?")
-                elif self.get_state_calls() <= 3:
-                    self.bot.say(self.user, "You still don't want to tell me your name?")
-                elif self.get_state_calls() <= 4:
-                    self.bot.say(self.user, "I guess I will never get to know your name...")
-                    # "Do you have privacy concerns???"
-                else:
-                    self.bot.say(self.user, "As I don't know your name, I will call you Mr. Pink.")
-                    self.user.s_name = 'Mr. Pink'
-                    self.state = 'success'
-
-                self.state = 'wait for answer'
-                self.time_asked = datetime.now()
-
-            elif self.state == 'wait for answer':
-                if (datetime.now() - self.time_asked).total_seconds() > wait_for_answer_time:
-                    self.bot.say(self.user, lingua.you_must_be_busy())
-                    self.state = 'failure'
-                    return
-
-                elif self.bot.inbox[self.user]:
-                    infos = {}
-                    for msg in self.bot.inbox[self.user]:
-                        results = corpus.process(msg.text)
-                        infos.update(corp_get(results, 'someone'))
-                        infos.update(corp_get(results, 'tone'))
-                        infos.update(corp_get(results, 'logic'))
-                        if ' ' not in msg.text:
-                            infos.update({'any': msg.text, 'any_score': 1})
-                        infos.update(corp_get(results, 'any'))
-
-                    if 'tone' in infos:
-                        if infos['tone'] == 'rude' and infos['tone_score'] > 0.4:
-                            self.bot.say(self.user, lingua.dont_be_so_rude())
-                            self.bot.clean_inbox(self.user)
-                    if 'someone' in infos and 'logic' in infos and infos['logic'] == "negative":
-                        self.bot.say(self.user, "haha! trying to test me? I'm smarter than you think... So... What's your name then?")
-                        self.state = 'wait for answer'
-                        self.time_asked = datetime.now()
-                        self.bot.clean_inbox(self.user)
-                        return
-                    if 'someone' in infos or 'any' in infos:
-                        answer = sa.get_gender_based_on_name(infos['someone'] if 'someone' in infos else infos['any'])
-                        if (infos['someone'] if 'someone' in infos else infos['any']).lower() == "Streets":
-                            self.bot.say(self.user, "Really?'{}'!. Just like me?. Are you sure I got it right?".format(
-                                infos['someone'] if 'someone' in infos else infos['any']))
-                            self.state = 'wait for confirmation'
-                            self.time_asked = datetime.now()
-                            self.bot.clean_inbox(self.user)
-                            self.user.s_name = "Streets"
-                            if answer is not None and answer['accuracy'] > 95:
-                                self.user.gender = answer['gender']
-                            else:
-                                self.bot.add_again_possible(AskGender(self.bot, self.user))
-                            return
-                        if answer and answer['samples'] < 1000:
-                            self.bot.say(self.user, "Really?'{}'!. That's unusual. Are you sure I got it right?".format(infos['someone'] if 'someone' in infos else infos['any']))
-                            self.state = 'wait for confirmation'
-                            self.time_asked = datetime.now()
-                            self.bot.clean_inbox(self.user)
-                            self.user.s_name = infos['someone'] if 'someone' in infos else infos['any']
-                            if answer is not None and answer['accuracy'] > 95:
-                                self.user.gender = answer['gender']
-                            else:
-                                self.bot.add_again_possible(AskGender(self.bot, self.user))
-                            return
-                        elif ('someone_score' in infos and infos['someone_score'] < 0.00001) or ('any' in infos and infos['any_score'] < 0.00001):
-                            self.bot.say(self.user,
-                                         "It's the first time I meet someone named '{}'!. Are you sure I got it right?".format(
-                                             infos['someone'] if 'someone' in infos else infos['any']))
-                            self.state = 'wait for confirmation'
-                            self.time_asked = datetime.now()
-                            self.bot.clean_inbox(self.user)
-                            self.user.s_name = infos['someone'] if 'someone' in infos else infos['any']
-                            if answer is not None and answer['accuracy'] > 95:
-                                self.user.gender = answer['gender']
-                            return
-                        self.user.s_name = infos['someone'] if 'someone' in infos else infos['any']
-                        self.bot.say(self.user, lingua.ok())
-                        self.bot.say(self.user, "Nice to meet you, {}!".format(self.user.s_name))
-                        self.bot.clean_inbox(self.user)
-
-                        if answer is not None and answer['accuracy'] > 85:
-                            self.user.gender = answer['gender']
-                        elif answer is not None and answer['accuracy'] > 70:
-                            if answer['gender'] == 'female':
-                                self.bot.say(self.user, "I know a few {} named like that, but also a {}.".format("girls", "boy"))
-                            else:
-                                self.bot.say(self.user, "I know a few {} named like that, but also a {}.".format("boys", "girl"))
-                            self.bot.launch_interaction(AskGender(self.bot, self.user))
-                        else:
-                            self.bot.say(self.user, "mmm... I don't know any people named like that.")
-                            if answer is not None and answer['accuracy'] > 95:
-                                self.user.gender = answer['gender']
-                            else:
-                                self.bot.launch_interaction(AskGender(self.bot, self.user))
-                        self.state = 'success'
-                        return
-                if self.bot.inbox[self.user]:
-                    self.bot.launch_interaction(ProcessSpontaneous(self.bot, self.user))
-                    return
-                if self.state == 'wait for answer' and self.get_state_calls_with_msg() >= 2:
-                    self.clean_state_calls_with_msg()
-                    self.state = 'start'
-                    return
-
-            elif self.state == 'wait for confirmation':
-                if (datetime.now() - self.time_asked).total_seconds() > wait_for_answer_time:
-                    self.bot.say(self.user, lingua.you_must_be_busy())
-                    self.state = 'failure'
-                    return
-
-                elif self.bot.inbox[self.user]:
-                    infos = {}
-                    for msg in self.bot.inbox[self.user]:
-                        results = corpus.process(msg.text)
-                        infos.update(corp_get(results, 'boolean'))
-                        infos.update(corp_get(results, 'tone'))
-                        infos.update(corp_get(results, 'someone'))
-
-                    if 'boolean' in infos and infos['boolean_score'] > 0 and infos['boolean'] == 'true':
-                        self.bot.say(self.user, "ok! got it! ... then,  nice to meet you, {}!".format(self.user.s_name))
-                        self.bot.add_possible(AskGender(self.bot, self.user))
-                        self.bot.clean_inbox(self.user)
-                        self.state = 'success'
-                        return
-                    elif 'someone' in infos and 'boolean' in infos and infos['boolean_score'] > 0 and infos['boolean'] == 'false':
-                        self.user.s_name = infos['someone']
-                        self.bot.say(self.user, "Ok! Understood! Nice to meet you, {}!".format(self.user.s_name))
-                        self.bot.add_possible(AskGender(self.bot, self.user))
-                        self.bot.clean_inbox(self.user)
-                        self.state = 'success'
-                        return
-                    elif 'boolean' in infos and infos['boolean_score'] > 0 and infos['boolean'] == 'false':
-                        self.bot.say(self.user, "Ok! What's your name then?")
-                        self.state = 'wait for answer'
-                        self.time_asked = datetime.now()
-                        self.bot.clean_inbox(self.user)
-                        return
-                    else:
-                        self.bot.say(self.user, "I'm not sure I get it")
-                        self.state = 'wait for confirmation'
-                        self.time_asked = datetime.now()
-                        self.bot.clean_inbox(self.user)
-                        return
-                if self.bot.inbox[self.user]:
-                    self.bot.launch_interaction(ProcessSpontaneous(self.bot, self.user))
-                    return
-                if self.state == 'wait for confirmation' and self.get_state_calls_with_msg() >= 2:
-                    self.bot.say(self.user, " '{}'! Did I understand your name correctly?".format(self.user.s_name))
-                    self.time_asked = datetime.now()
-                    self.clean_state_calls_with_msg()
-                    return
-
-            elif self.state == 'success':
-                self.bot.remove_possible(self)
-                self.bot.launch_interaction(Breath(self.bot, self.user))
-                self.state = 'end'
-
-            elif self.state == 'failure':
-                self.state = 'end'
-
-            elif self.state == 'end':
-                pass
-    # ---------------------------------------------------------------------------------------------------------------------
-
-
-    class AskGender(Interaction):  # ok
-        def __init__(self, bot, user):
-            super().__init__(bot, user)
-            self.time_asked = None
-
-        def usefulness(self):
-            if self.user.gender:
-                return 0.0
-            else:
-                return 0.9
-
-        def execute(self):
-            super().execute()
-
-            if self.state is None:
-                self.state = 'start'
-
-            elif self.state == 'start':
-                self.bot.say(self.user, "Are you a male or female?")
-                self.state = 'wait for answer'
-                self.time_asked = datetime.now()
-
-            elif self.state == 'wait for answer':
-                if (datetime.now() - self.time_asked).total_seconds() > wait_for_answer_time:
-                    self.bot.say(self.user, lingua.you_must_be_busy())
-                    self.state = 'failure'
-                    return
-
-                elif self.bot.inbox[self.user]:
-                    infos = {}
-                    for msg in self.bot.inbox[self.user]:
-                        results = corpus.process(msg.text)
-                        infos.update(corp_get(results, 'gender'))
-                        infos.update(corp_get(results, 'tone'))
-
-                    if 'tone' in infos:
-                        if infos['tone'] == 'rude' and infos['tone_score'] > 0.0:
-                            self.bot.say(self.user, lingua.dont_be_so_rude())
-                            self.bot.clean_inbox(self.user)
-                    if 'gender' in infos and infos['gender_score'] > 0.0:
-                        self.user.gender = infos['gender']
-                        self.bot.say(self.user, lingua.ok())
-                        self.bot.clean_inbox(self.user)
-                        self.state = 'success'
-
-                if self.bot.inbox[self.user]:
-                    self.bot.launch_interaction(ProcessSpontaneous(self.bot, self.user))
-                    return
-                if self.state == 'wait for answer' and self.get_state_calls_with_msg() >= 3:
-                    self.clean_state_calls_with_msg()
-                    self.state = 'ask'
-                    return
-
-            elif self.state == 'success':
-                self.bot.remove_possible(self)
-                self.bot.launch_interaction(Breath(self.bot, self.user))
-                self.state = 'end'
-
-            elif self.state == 'failure':
-                self.resetting()
-                self.state = 'end'
-
-            elif self.state == 'end':
-                pass
-    # ----------------------------------------------------------------------------------------------------------------------
     def __init__(self, bot, user):
         super().__init__(bot, user)
 
@@ -670,8 +398,12 @@ class AskLocation(Interaction):  # ok
 
                 if 'street-address' in infos:
                     if self.user.last_channel_per_bot[self.bot.name] in ["Facebook"]:
+                        try:
+                            street_string = str(self.user.s_home_location['street-address'])
+                        except:
+                            street_string = str(self.user.s_home_location)
                         self.bot.say(self.user, "Thanks a lot, {}! I did record this location ({}) as your home location. Feel free to type 'location' any time later... :-)".format(
-                            self.user.s_name or ("Miss" if self.user.gender == 'female' else "Mister"), str(self.user.s_home_location) ))
+                                         self.user.s_name or ("Miss" if self.user.gender == 'female' else "Mister"), str(street_string) ))
 
                     else:
                         self.bot.say(self.user, "Thanks a lot, {}! I did record this location as your home location. Feel free to use the 'share a point/location' functionality any time later... :-)".format(self.user.s_name or ("Miss" if self.user.gender == 'female' else "Mister")))
@@ -762,6 +494,296 @@ class AskLocation(Interaction):  # ok
 
         elif self.state == 'end':
             pass
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+class SendViral(Interaction):  # ok
+    def __init__(self, bot, user):
+        super().__init__(bot, user)
+
+    def usefulness(self):
+        if datetime.now() < datetime.strptime(str(self.user.s_time_of_last_message), '%Y-%m-%d %H:%M:%S.%f') + timedelta(hours=0.1):
+            return 0.0
+        if self.calls == 0:
+            # This interaction never ran before for this user
+            return 0.05
+        else:
+            if self.timesince_last_call() > a_month:  # Every months. I don't want to spam too much my user
+                return 0.05
+            return 0.0
+
+    def execute(self):
+        super().execute()
+
+        if self.state is None:
+            self.state = 'start'
+
+        elif self.state == 'start':
+            self.time_started = datetime.now()
+            self.state = 'wait_a_bit'
+
+        elif self.state == 'wait_a_bit':
+            if (datetime.now() - self.time_started).total_seconds() > 5:  # Wait a bit after previous interaction before sending a lot of text
+                self.state = 'say'
+
+        elif self.state == 'say':
+            if self.user.last_channel_per_bot[self.bot.name] != "webchat":
+                self.bot.say(self.user, "Don't mess with me, {}! If you don't send the following message to, at least 6 friends in the next 5 min, I'll destroy your life!!! Beware!!".format(self.user.s_name))
+                if self.user.last_channel_per_bot[self.bot.name] == "Telegram":
+                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with the Sensay Network! It's amazing! You can chat instantly with a helpful human: https://t.me/SensayChatBot ")
+                elif self.user.last_channel_per_bot[self.bot.name] == "Line":
+                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! It's amazing! You can chat instantly with a helpful human: https://line.me/R/ti/p/TBD ")
+                elif self.user.last_channel_per_bot[self.bot.name] == "Twilio":
+                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! It's amazing! You can chat instantly with a helpful human: here is her phone: +32460TBD")
+                elif self.user.last_channel_per_bot[self.bot.name] == "Kik":
+                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! It's amazing! You can chat instantly with a helpful human: https://kik.me/TBD")
+                elif self.user.last_channel_per_bot[self.bot.name] == "Skype":
+                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! It's amazing! You can chat instantly with a helpful human: https://join.skype.com/bot/TBD")
+                elif self.user.last_channel_per_bot[self.bot.name] == "Facebook":
+                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! It's amazing! You can chat instantly with a helpful human:  http://m.me/SensayChatBot")
+                else:
+                    self.bot.say(self.user, "Hi my friend, I recommend you to chat with Sensay Network! He is amazing! You can chat instantly with a helpful human:  http://m.me/SensayChatBot")
+            else:
+                self.bot.say(self.user, "I would highly appreciate if you recommend me to your friends. Share the following link with all your friends (http://m.me/SensayChatBot) and maybe, you will chat together!!")
+
+            self.state = 'success'
+
+        elif self.state == 'success':
+            self.bot.launch_interaction(Breath(self.bot, self.user))
+            self.state = 'end'
+
+        elif self.state == 'failure':
+            self.state = 'end'
+
+        elif self.state == 'end':
+            pass
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+class Breath(Interaction):  # ok
+    """ Just wait a bit and slow the discussion a bit to make it more natural when needed"""
+    def __init__(self, bot, user):
+        super().__init__(bot, user)
+
+    def usefulness(self):
+        return 0.0
+
+    def execute(self):
+        super().execute()
+        if self.state is None:
+            self.state = 'start'
+
+        elif self.state == 'start':
+            self.start = datetime.now()
+            self.state = 'wait_a_bit'
+
+        elif self.state == 'wait_a_bit':
+            if (datetime.now() - self.start).total_seconds() < 5:
+                return
+            else:
+                self.state = 'success'
+
+        elif self.state == 'success':
+            self.bot.remove_possible(self)
+            self.state = 'end'
+
+        elif self.state == 'end':
+            pass
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+class AskQuestion(Interaction):  # ok
+    def __init__(self, bot, user):
+        super().__init__(bot, user)
+        self.time_asked = datetime.now()
+        self.time_conf_asked = datetime.now()
+        self.query = None
+        self.question_local = None
+
+    def usefulness(self):
+        return 0
+
+    def execute(self):
+        super().execute()
+
+        if self.state is None:
+            self.state = 'start'
+
+        elif self.state == 'start':
+            self.bot.say(self.user, "Ok, let's start... but first, does your question has to be shared with only your neighbours? (Y = Only locals, N= Skilled community) (y/n)")
+            self.state = 'wait for first answer'
+            self.time_asked = datetime.now()
+            self.question_local = False
+
+        elif self.state == 'wait for first answer':
+            if (datetime.now() - self.time_asked).total_seconds() > 60 * 5:
+                self.bot.say(self.user, "Ok, don't hesitate to come back to me later with a question via the menu...")
+                self.state = 'failure'
+                return
+
+            elif self.bot.inbox[self.user]:
+
+                infos = {}
+                for msg in self.bot.inbox[self.user]:
+                    results = corpus.process(msg.text)
+                    infos.update(corp_get(results, 'boolean'))
+                    infos.update(corp_get(results, 'tone'))
+
+                if 'tone' in infos:
+                    if infos['tone'] == 'rude' and infos['tone_score'] > 0.7:
+                        self.bot.say(self.user, lingua.dont_be_so_rude())
+                        self.bot.clean_inbox(self.user)
+                elif 'boolean' in infos and infos['boolean_score'] > 0.1:
+                    self.bot.clean_inbox(self.user)
+                    if infos['boolean'] == "true":
+                        self.question_local = True
+                    self.bot.say(self.user, lingua.ok())
+                    if self.user.s_home_location is None:
+                        self.bot.launch_interaction(AskLocation(self.bot, self.user))
+                        self.state = 'Ask the question after asking location'
+                    else:
+                        self.bot.say(self.user, "Now, Tell me... What is your question?")
+                        self.state = 'wait for answer'
+                    return
+                else:
+                    self.bot.say(self.user, lingua.i_dont_understand_sensay())
+                    self.bot.clean_inbox(self.user)
+                    return
+
+            if self.bot.inbox[self.user]:
+                self.bot.launch_interaction(ProcessSpontaneous(self.bot, self.user))
+                return
+            if self.state == 'wait for first answer' and self.get_state_calls_with_msg() >= 3:
+                self.clean_state_calls_with_msg()
+                self.state = 'start'
+                return
+
+        elif self.state == 'Ask the question after asking location':
+            self.bot.say(self.user, "Ok,  tell me... What is your question? (you can mention one skill needed in you question with a '#' at the end; for example #coding or #wine)")
+            self.state = 'wait for answer'
+            return
+
+        elif self.state == 'wait for answer':
+            if (datetime.now() - self.time_asked).total_seconds() > 60*5:
+                self.bot.say(self.user, "Ok, don't hesitate to come back to me later with a question via the menu...")
+                self.state = 'failure'
+                return
+
+            elif self.bot.inbox[self.user]:
+                infos = {}
+                for msg in self.bot.inbox[self.user]:
+                    results = corpus.process(msg.text)
+                    infos.update({'text': msg.text})
+                    infos.update(corp_get(results, 'tone'))
+
+                if 'tone' in infos:
+                    if infos['tone'] == 'rude' and infos['tone_score'] > 0.9:
+                        self.bot.say(self.user, lingua.dont_be_so_rude())
+                        self.bot.clean_inbox(self.user)
+                        self.state = 'failure'
+                        return
+
+                self.query = Question(infos['text'], self.user)
+                self.query.question_local = self.question_local
+                if self.query.question_local:
+                    self.bot.say(self.user, "The question that will be sent to your neighbours is: " + str(self.query.question) + ". Do you confirm? (y/n)" )
+                else:
+                    self.bot.say(self.user, "The question that will be sent to the Sensay community is: " + str(self.query.question) + ". Do you confirm? (y/n)")
+                self.time_conf_asked = datetime.now()
+                self.bot.clean_inbox(self.user)
+                self.state = 'wait for confirmation'
+                return
+
+            if self.bot.inbox[self.user]:
+                self.bot.launch_interaction(ProcessSpontaneous(self.bot, self.user))
+                return
+            if self.state == 'wait for answer' and self.get_state_calls_with_msg() >= 3:
+                self.clean_state_calls_with_msg()
+                self.state = 'start'
+                return
+
+        elif self.state == 'wait for confirmation':
+            if (datetime.now() - self.time_conf_asked).total_seconds() > wait_for_answer_time:
+                self.bot.say(self.user, lingua.you_must_be_busy())
+                self.state = 'failure'
+                return
+
+            elif self.bot.inbox[self.user]:
+                infos = {}
+                for msg in self.bot.inbox[self.user]:
+                    results = corpus.process(msg.text)
+                    infos.update(corp_get(results, 'boolean'))
+                    infos.update(corp_get(results, 'tone'))
+                if 'tone' in infos:
+                    if infos['tone'] == 'rude' and infos['tone_score'] > 0.7:
+                        self.bot.say(self.user, lingua.dont_be_so_rude())
+                        self.bot.clean_inbox(self.user)
+                elif 'boolean' in infos and infos['boolean_score'] > 0.1:
+                    self.bot.clean_inbox(self.user)
+                    if infos['boolean'] == "true":
+                        self.state = 'success'
+                        if self.query.question_local:
+                            is_not_too_far = lambda u: self.bot.distance(u, self.user, "s_home_location") < 18000.0
+                            is_not_the_user = lambda u: u is not self.user
+                            users_not_too_far = self.bot.search_if(lambda f: is_not_too_far(f) and is_not_the_user(f))
+                            distance = lambda u: self.bot.distance(u, self.user, "s_home_location")
+                            ranked = sorted(users_not_too_far, key=distance)
+                            if ranked is None or len(ranked) <= 0:
+                                self.bot.say(self.user, "Sorry but it seems very few users are currently connected in your area. I will keep you posted when more people are around your place.")
+                                self.bot.clean_inbox(self.user)
+                                return
+                            self.query.to_be_asked = ranked[:10]
+                            self.bot.launch_interaction(LoopToAll(self.bot, self.query))
+                            self.bot.say(self.user, "Ok, understood!\n ((( Signaling Sensay Local Community )))  \n  I'm currently looking for a human to help. Stay connected. It might take max 5 minutes...")
+                            self.bot.say(self.user, "When someone replies, you will be in an anonymous chat with a fellow human. Stay connected.")
+                        else:
+                            is_not_too_badly_rated = lambda u: u is not self.user
+                            is_with_skills = lambda u: u is not self.user
+                            is_not_the_user = lambda u: u is not self.user
+                            users_potential = self.bot.search_if(lambda f: is_not_the_user(f))
+                            distance = lambda u: self.bot.distance(u, self.user, "s_home_location")
+                            ranked = sorted(users_potential, key=distance)
+                            if ranked is None or len(ranked) <= 0:
+                                self.bot.say(self.user,
+                                             "Sorry but it seems very few users are currently connected now. I will keep you posted when more people are around your place.")
+                                self.bot.clean_inbox(self.user)
+                                return
+                            self.query.to_be_asked = ranked[:10]
+                            self.bot.launch_interaction(LoopToAll(self.bot, self.query))
+                            self.bot.say(self.user,
+                                         "Ok, understood!\n ((( Signaling Sensay Community )))  \n  I'm currently looking for a human to help. Stay connected. It might take max 5 minutes...")
+                            self.bot.say(self.user,
+                                         "When someone replies, you will be in an anonymous chat with a fellow human. Stay connected.")
+
+                    else:
+                        self.state = 'failure'
+                        self.bot.say(self.user, "Ok! No probs")
+                    self.bot.clean_inbox(self.user)
+                    return
+                else:
+                    self.bot.say(self.user, lingua.i_dont_understand_sensay())
+                    self.bot.clean_inbox(self.user)
+                    return
+            if self.bot.inbox[self.user]:
+                self.bot.launch_interaction(ProcessSpontaneous(self.bot, self.user))
+                return
+            if self.state == 'wait for confirmation' and self.get_state_calls_with_msg() >= 2:
+                self.clean_state_calls_with_msg()
+                self.state = 'start'
+                return
+
+        elif self.state == 'success':
+            self.bot.launch_interaction(Breath(self.bot, self.user))
+            self.state = 'end'
+            self.time_asked = datetime.now()
+
+        elif self.state == 'failure':
+            self.resetting()
+            self.state = 'end'
+
+        elif self.state == 'end':
+            pass
+# ----------------------------------------------------------------------------------------------------------------------
 
 
 class LoopToAll(Interaction):
@@ -883,7 +905,7 @@ class AskFriendContact(Interaction):  # ok
                         text += "I'll inform you when you might do an activity together.\n"
                         text += "\n Olivia"
                         self.bot.postmail(str(infos['email']), text)
-                    self.bot.say(self.user, "Thank you! I'll contact him and see if you can do an activity together!")
+                    self.bot.say(self.user, "Thank you! I'll contact him and see if we can chat!")
                     self.bot.clean_inbox(self.user)
                     self.state = 'success'
 
@@ -946,6 +968,10 @@ class AskAnswer(Interaction):
             self.time_conf_asked = datetime.now()
             
         elif self.state == 'wait for confirmation':
+            if self.query.answered or self.user.chatting is True or self.query.user_asked.chatting is True:
+                self.bot.say(self.user, "It's ok, I found another Sensay member able to chat with him. Never mind")
+                self.state = 'failure'
+                return
             if (datetime.now() - self.time_conf_asked).total_seconds() > 60*10:
                 self.bot.say(self.user, lingua.you_must_be_busy())
                 self.state = 'failure'
@@ -1175,7 +1201,7 @@ class RateUser(Interaction):
                                 self.other_user.rating = []
                                 self.other_user.rating.append(max(min(int(reply[0]), 5), 0))
                 if reply is not None:
-                    self.bot.say(self.user, lingua.ok() + "  Thanks for the feedback!!")
+                    self.bot.say(self.user, lingua.ok() + ".  Thanks for the feedback!!")
                     self.bot.clean_inbox(self.user)
                     self.state = 'success'
 
@@ -1285,6 +1311,11 @@ class ProcessSpontaneous(Interaction):
                             self.bot.launch_interaction(AskLocation(self.bot, self.user))
                             self.state = 'success'
                             return
+                        if "Off" == msg.text.capitalize():
+                            self.bot.clean_inbox(self.user)
+                            self.bot.launch_interaction(Snooze(self.bot, self.user))
+                            self.state = 'success'
+                            return
 
                     if 'tone' in infos:
                         if infos['tone'] == 'rude' and infos['tone_score'] > 0.6:
@@ -1327,7 +1358,7 @@ class ProcessSpontaneous(Interaction):
                                              "For example, you can type 'discuss' and ask stuff like 'who can fix my bike around me?' or 'I need a gift for a geeky friend, any idea?' or 'I need to practice my Spanish, who is willing to chat whith me in Spanish?' :-)")
                             else:
                                 self.bot.say(self.user,
-                                             "For example, you can type 'discuss' and ask stuff like 'who has a lawnmower to lend around me?' or 'I need a gift for a keeky friend, any idea?' or 'I have too many eggs produced by my chickens, who wants to take some at home?' :-)")
+                                             "For example, you can type 'discuss' and ask stuff like 'who has a lawnmower to lend around me? #repair' or 'I need a gift for a geeky friend, any idea? #geek' or 'I have too many eggs produced by my chickens, who wants to take some at home?' :-)")
                             self.bot.clean_inbox(self.user)
                             self.state = 'success'
                             return
@@ -1369,3 +1400,70 @@ class ProcessSpontaneous(Interaction):
 
         elif self.state == 'end':
             pass
+
+
+class Snooze(Interaction):  # ok
+    """ Just wait a bit to snooze"""
+    def __init__(self, bot, user):
+        super().__init__(bot, user)
+
+    def usefulness(self):
+        return 0.0
+
+    def execute(self):
+        super().execute()
+        if self.state is None:
+            self.state = 'start'
+
+        elif self.state == 'start':
+            self.start = datetime.now()
+            self.bot.say(self.user, "Ok, I'll stop spamming you for a while.")
+            self.state = 'wait_a_bit'
+
+        elif self.state == 'wait_a_bit':
+            if (datetime.now() - self.start).total_seconds() < 60*60*24*7:
+                return
+            else:
+                self.state = 'success'
+
+        elif self.state == 'success':
+            self.bot.remove_possible(self)
+            self.state = 'end'
+
+        elif self.state == 'end':
+            pass
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+class AddSkill(Interaction):  # ok
+    """ Just wait a bit to snooze"""
+    def __init__(self, bot, user, query):
+        super().__init__(bot, user)
+        self.query = query
+
+    def usefulness(self):
+        return 0.0
+
+    def execute(self):
+        super().execute()
+        if self.state is None:
+            self.state = 'start'
+
+        elif self.state == 'start':
+            self.start = datetime.now()
+            self.bot.say(self.user, "Ok, I'll add this skill in your list of skills.")
+            self.state = 'wait_a_bit'
+
+        elif self.state == 'wait_a_bit':
+            if (datetime.now() - self.start).total_seconds() < 60*60*24*7:
+                return
+            else:
+                self.state = 'success'
+
+        elif self.state == 'success':
+            self.bot.remove_possible(self)
+            self.state = 'end'
+
+        elif self.state == 'end':
+            pass
+# ---------------------------------------------------------------------------------------------------------------------
